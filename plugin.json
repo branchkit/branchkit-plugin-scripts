@@ -1,0 +1,268 @@
+{
+  "$schema": "https://branchkit.dev/schemas/manifest.json",
+  "id": "scripts",
+  "name": "Scripts",
+  "icon": "code",
+  "version": "0.1.0",
+  "min_api_version": "0.2.0",
+  "description": "Host for user scripts — Lua, JavaScript, TypeScript, or Python, told apart by extension. Drop a file in the scripts folder and it can add voice commands, react to platform events, dispatch actions, query platform state, and push HUD fragments — all through this plugin's grants.",
+  "author": "BranchKit",
+  "publisher": "github:branchkit",
+  "requires": {
+    "capabilities": {
+      "uses": [
+        "hud.show",
+        "native.apps_for_path",
+        "native.frontmost_app",
+        "native.open_target",
+        "native.open_with_app"
+      ],
+      "dynamic": "Runs the person's own scripts, which call whatever operations they name; each call is refused where this computer cannot serve it."
+    },
+    "network": { "hosts": [], "requestable": true },
+    "privileges": [
+      "dispatch",
+      "filesystem",
+      "apps"
+    ],
+    "optional_privileges": [
+      "apps.control",
+      "input",
+      "system",
+      "system.control",
+      "system.indicator",
+      "windows",
+      "events.world",
+      "spaces",
+      "accessibility",
+      "clipboard",
+      "events.clipboard",
+      "screenshot",
+      "audio",
+      "sound",
+      "speech",
+      "display",
+      "appearance",
+      "notifications",
+      "dock",
+      "finder",
+      "menu",
+      "menubar",
+      "power",
+      "process",
+      "hardware",
+      "locale",
+      "network",
+      "privacy",
+      "user",
+      "session",
+      "sharing",
+      "storage",
+      "icloud",
+      "calendar",
+      "contacts"
+    ],
+    "runtimes": ["python"],
+    "protected_reads": ["password_managers", "branchkit_windows"],
+    "reasons": {
+      "protected_read:password_managers": "So a script you write can read what a password manager's window shows. Off until you turn it on.",
+      "protected_read:branchkit_windows": "So a script you write can read BranchKit's own windows, its permission prompt among them, for example to speak them aloud. Off until you turn it on."
+    }
+  },
+  "dispatch_via": "direct",
+  "dev": {
+    "build": [
+      ["go", "build", "-ldflags=-s -w", "-o", "../scripts-plugin", "."]
+    ],
+    "build_dir": "src"
+  },
+  "run": "./scripts-plugin",
+  "action_prefix": "scripts",
+  "action_types": {
+    "pick_choice": {
+      "label": "Pick a chooser option",
+      "fields": [
+        {
+          "key": "choice",
+          "label": "Choice",
+          "field_type": "string"
+        }
+      ]
+    },
+    "run": {
+      "label": "Run script handler",
+      "fields": [
+        { "key": "script", "label": "Script", "field_type": "string" },
+        { "key": "handler", "label": "Handler", "field_type": "string" }
+      ]
+    }
+  },
+  "consumes": {
+    "effects": [
+      {
+        "asserts": [
+          "suppress_notifications",
+              "suppress_huds",
+          "disable_screen_dim",
+          "signal_recording_active"
+        ],
+        "user_visible_name": "Script Effects",
+        "user_visible_description": "Lets your scripts hold system effects while they run — muting notifications during a meeting, keeping the screen awake while presenting, signalling that a recording is in progress. Whoever asserts last wins, and the previous holder is told it lost."
+      }
+    ],
+    "dispatch": [
+      "apps",
+      "audio",
+      "placement",
+      "input"
+    ],
+    "collections": [
+      "apps",
+      { "name": "keys", "fields": ["key"] },
+      { "name": "modifiers", "fields": ["key"] },
+      { "name": "_platform.key_names", "fields": ["name"] },
+      "layout_characters",
+      "alphabet",
+      { "name": "number", "fields": ["key"] },
+      { "name": "direction", "fields": ["key"] },
+      { "name": "_platform.bindings", "fields": ["id", "trigger", "action"] }
+    ],
+    "events": [
+      { "pattern": "_platform.app.focused" },
+      { "pattern": "_platform.audio_devices.changed" },
+      { "pattern": "_platform.system.did_wake" },
+      { "pattern": "_platform.system.will_sleep" },
+      { "pattern": "_platform.workspace.changed" },
+      { "pattern": "_platform.collection.updated" },
+      { "pattern": "_platform.window.created" },
+      { "pattern": "_platform.window.closed" },
+      { "pattern": "_platform.window.focused" },
+      { "pattern": "_platform.window.frame_changed" },
+      { "pattern": "_platform.window.title_changed" },
+      { "pattern": "_platform.clipboard.changed" },
+      { "pattern": "_platform.power.changed" },
+      { "pattern": "_platform.display.changed" },
+      { "pattern": "_platform.network.changed" },
+      { "pattern": "_platform.thermal.changed" },
+      { "pattern": "_platform.keyboard.layout_changed" },
+      { "pattern": "_platform.memory_pressure.changed" },
+      { "pattern": "_platform.privilege.granted" },
+      { "pattern": "_platform.effect.displaced" },
+      { "pattern": "scripts.*.*" }
+    ]
+  },
+  "hud_windows": [
+    {
+      "channel": "scripts",
+      "anchor": "bottom-right",
+      "width": 320,
+      "min_height": 60,
+      "description": "Script output"
+    }
+  ],
+  "provides": {
+    "effects": {
+      "*": {
+        "description": "Names your scripts invent at runtime with hold(\"scripts.<name>\") — a way for a script and a plugin to agree on who owns a shared moment.",
+        "access": "open"
+      }
+    },
+    "events": {
+      "scripts.*.*": {
+        "description": "Events emitted by hosted scripts, as scripts.<script>.<event>. The script name is the file's stem and the event name is whatever the script passed to emit(); both are single segments, and the host refuses anything else. The source stays `scripts` — the platform attributes every emit to this plugin — and the script is named in on_behalf_of."
+      }
+    },
+    "collections": {
+      "plugin.scripts.choices": {
+        "id_strategy": { "type": "by_field", "field": "codeword" },
+        "preset": "named_entities",
+        "writers": "introducer_only",
+        "fields": [
+          {
+            "key": "codeword",
+            "field_type": "string",
+            "label": "Codeword"
+          },
+          {
+            "key": "pick",
+            "field_type": "string",
+            "label": "Choice value"
+          }
+        ],
+        "feeds_matching": {
+          "type": "as_named_entities",
+          "key_field": "codeword",
+          "value_field": "pick"
+        },
+        "label": "Script chooser options",
+        "description": "Transient options for an open chooser. Populated only while a script is waiting for the user to pick, one entry per option, mapping the spoken codeword to the value handed back to the script. Deliberately NOT cleared on session boundary the way the disambiguation equivalent is: a tie is resolved inside one utterance, while a script's chooser is a question the user is allowed to think about. The host times it out instead, so the gate always has an exit."
+      },
+      "plugin.scripts.choosing": {
+        "preset": "tag",
+        "writers": "introducer_only",
+        "exclusive": true,
+        "fields": [],
+        "label": "A script is awaiting a choice",
+        "description": "Held while a chooser is open. Exclusive, so the options are the only thing matchable and an unrelated command cannot fire while the user is answering. Escapable like any exclusive gate, and the host also releases it on timeout and on teardown of the script that opened it."
+      },
+      "plugin.scripts.modes": {
+        "preset": "tag",
+        "cardinality": "multi",
+        "writers": "introducer_only",
+        "exclusive": true,
+        "fields": [
+          { "key": "name", "label": "Mode", "field_type": "string", "required": true }
+        ],
+        "feeds_matching": { "type": "as_gates", "name_field": "name", "scoped": true },
+        "label": "Script modes",
+        "description": "Exclusive modes held by scripts. Each record is a tag: while one is active, only commands requiring it match, so a script can own the whole spoken surface for as long as it needs. Record names are namespaced by script, and only this plugin writes here — scripts reach it through mode() and clear_mode(), never as a raw collection write. Escapable: the global escape command clears it like any other exclusive gate."
+      },
+      "plugin.scripts.store": {
+        "preset": "data",
+        "cardinality": "multi",
+        "id_strategy": { "type": "by_field", "field": "key" },
+        "writers": "introducer_only",
+        "label": "Script storage",
+        "fields": [
+          { "key": "key", "label": "Key", "field_type": "string", "required": true },
+          { "key": "value", "label": "Value", "field_type": "string", "required": false }
+        ],
+        "description": "Per-script persistence, one record per script and key. Keys are namespaced by script, so one script cannot read or overwrite another's. Values are JSON. Reached through store() and stored(); the records are deleted with their script, so storage inherits reload and delete semantics for free."
+      },
+      "plugin.scripts.scripts": {
+        "preset": "data",
+        "cardinality": "multi",
+        "id_strategy": { "type": "by_field", "field": "script" },
+        "writers": "introducer_only",
+        "label": "Script state",
+        "fields": [
+          { "key": "script", "label": "Script", "field_type": "string", "required": true },
+          { "key": "enabled", "label": "Enabled", "field_type": "boolean", "required": true },
+          { "key": "last_error", "label": "Last error", "field_type": "string", "required": false }
+        ],
+        "description": "Per-script host state: one record per script file with whether it runs and the last load or runtime error. The host reconciles script state from this collection — a disabled record stops the script and retracts its commands."
+      },
+      "plugin.scripts.config": {
+        "preset": "settings",
+        "label": "Scripts",
+        "description": "Settings for the scripts host. Defaults live here; only your changes are stored.",
+        "fields": [
+          {
+            "key": "editor",
+            "label": "Editor",
+            "description": "App used by the Edit and New script buttons. Empty means the system default for .lua files.",
+            "field_type": "string",
+            "default": ""
+          }
+        ]
+      }
+    }
+  },
+  "implements": {
+    "on_action": true,
+    "render_settings": true,
+    "settings_tabs": [
+      { "label": "Scripts", "key": "scripts" }
+    ]
+  }
+}

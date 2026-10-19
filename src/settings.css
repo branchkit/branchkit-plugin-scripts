@@ -1,0 +1,157 @@
+/* The scripts plugin's settings tab. Shipped through
+   RenderSettingsResponse.CSS, so it lands in the frame's <style id="plugin-css">
+   rather than being rebuilt into the markup on every render.
+
+   The literals that arrived from the markup are gone: greys resolved to the
+   nearest step of the text ramp (#888 -> --text-dim, #666 -> --color-muted),
+   #333 borders to --border, and the status dots to --success / --danger. Each
+   changed the colour, which is what this tab wanted — it now tracks the
+   palette instead of freezing one. */
+
+.scripts-tab {
+    /* Block only: the frame supplies the pane gutter (frame.html). */
+    padding-block: var(--size-0);
+    font-family: var(--font-neo-grotesque);
+
+    /* Header: title, then the new-script control. */
+    & .sc-head {
+        display: flex;
+        align-items: center;
+        gap: var(--size--2);
+        margin-bottom: var(--size--2);
+    }
+
+    /* Every action button on this tab; the inline font-size/margin strings
+       the string builder carried, as one class. */
+    & .sc-btn { font-size: var(--font-size--2); margin-left: var(--size--2); }
+    & .sc-btn--run { margin-left: 0; margin-right: var(--size--2); }
+    & .sc-btn--current { font-weight: 700; border-color: var(--brand-accent-0); }
+    & .sc-editor-actions > .sc-btn:first-child { margin-left: 0; }
+    & .sc-new-label { font-size: var(--font-size--2); color: var(--_ink-dim); margin-left: auto; }
+    & .sc-lede {
+        color: var(--_ink-dim);
+        margin: 0 0 var(--size-0) 0;
+        font-size: var(--font-size--1);
+    }
+    & .sc-empty { color: var(--_ink-dim); }
+
+    /* One script's row. The dot says whether it loaded, failed, or is off. */
+    & .sc-row {
+        padding: var(--size--2) 0;
+        border-bottom: var(--border-width-0) solid var(--neutral-variant-3);
+    }
+    & .sc-row-main { display: flex; align-items: center; }
+    & .sc-dot-ok { color: var(--success-text); }
+    & .sc-dot-off { color: var(--_ink-dim); }
+    & .sc-dot-err { color: var(--danger-text); }
+    & input[type="text"].sc-rename {
+        background: var(--neutral-2);
+        --_ink: var(--neutral-2-on);
+        --_ink-dim: var(--neutral-2-dim);
+        border: var(--border-width-0) solid var(--neutral-variant-3);
+        color: inherit;
+        border-radius: var(--border-radius-0);
+        padding: var(--size--2) var(--size--2);
+        font-size: var(--font-size--1);
+    }
+
+    /* What a script registers, indented under its name. Two indents: 20px for
+       everything, at 12px for the permissions header and 13px for the rest. */
+    & .sc-perm {
+        margin: var(--size--2) 0 0 var(--size-3);
+        font-size: var(--font-size--2);
+        color: var(--_ink-dim);
+    }
+    & .sc-detail {
+        margin: var(--size--2) 0 0 var(--size-3);
+        font-size: var(--font-size--1);
+        color: var(--_ink-dim);
+    }
+    & .sc-detail-warn {
+        margin: var(--size--2) 0 0 var(--size-3);
+        font-size: var(--font-size--1);
+        color: var(--warning-text);
+    }
+    & .sc-detail-row {
+        display: flex;
+        align-items: center;
+        margin: var(--size--2) 0 0 var(--size-3);
+        font-size: var(--font-size--1);
+    }
+    & .sc-mode-note { margin-left: var(--size--2); color: var(--_ink-dim); }
+    & .sc-error {
+        color: var(--danger-text);
+        font-size: var(--font-size--2);
+        margin: var(--size--2) 0 0 var(--size-3);
+        white-space: pre-wrap;
+    }
+    & .sc-warn { color: var(--warning-text); }
+    & .sc-danger { color: var(--danger-text); }
+    & .sc-muted { color: var(--_ink-dim); }
+
+    /* The inline editor a script's Edit button opens. */
+    & .sc-editor { margin: var(--size--2) 0 var(--size--2) var(--size-3); }
+    & textarea.sc-editor-area {
+        width: 100%;
+        box-sizing: border-box;
+        font-family: var(--font-mono);
+        font-size: var(--font-size--2);
+        line-height: var(--font-line-height--3);
+        background: var(--neutral-1);
+        --_ink: var(--neutral-1-on);
+        --_ink-dim: var(--neutral-1-dim);
+        color: var(--_ink);
+        border: var(--border-width-0) solid var(--neutral-variant-3);
+        border-radius: var(--border-radius-0);
+        padding: var(--size--2);
+        resize: vertical;
+    }
+    & .sc-editor-err {
+        color: var(--danger-text);
+        font-size: var(--font-size--2);
+        font-family: var(--font-mono);
+        white-space: pre-wrap;
+        margin-top: var(--size--2);
+    }
+    & .sc-editor-actions { margin-top: var(--size--2); }
+
+    /* Platform privileges: what the scripts' call: permissions map onto. */
+    & .sc-priv-title { margin: var(--size-3) 0 var(--size--2) 0; font-size: var(--font-size-0); }
+    & .sc-priv-lede {
+        color: var(--_ink-dim);
+        margin: 0 0 var(--size--2) 0;
+        font-size: var(--font-size--2);
+    }
+    & .sc-priv-row {
+        display: flex;
+        align-items: center;
+        gap: var(--size--2);
+        padding: var(--size--2) 0;
+        border-top: var(--border-width-0) solid var(--neutral-3);
+    }
+    & .sc-priv-name { font-size: var(--font-size--1); }
+    & .sc-priv-note {
+        font-size: var(--font-size--2);
+        color: var(--_ink-dim);
+        margin-top: var(--size--2);
+    }
+    /* The grant state, trailing the privilege name. */
+    & .sc-state {
+        font-size: var(--font-size--2);
+        margin-left: var(--size--2);
+        color: var(--_ink-dim);
+    }
+    & .sc-state-ok { color: var(--success-text); }
+    & .sc-state-pending { color: var(--warning-text); }
+    & .sc-state-denied { color: var(--danger-text); }
+
+    /* Editor preference, at the foot. */
+    & .sc-pref-row {
+        display: flex;
+        align-items: center;
+        gap: var(--size--2);
+        padding: var(--size--2) 0;
+        margin-top: var(--size--2);
+    }
+    & .sc-pref-title { font-size: var(--font-size--1); font-weight: 600; }
+}

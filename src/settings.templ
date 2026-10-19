@@ -1,0 +1,204 @@
+package main
+
+import "github.com/branchkit/plugin-sdk-go"
+import "github.com/branchkit/plugin-sdk-go/ui"
+import "fmt"
+
+// The Scripts tab. Row state that belongs to one window — the rename form,
+// the open editor, its buffer, its lint verdict — lives in page signals
+// declared __ifmissing, so a background re-render never resets an open
+// editor or its typing, and one window's half-finished action never
+// appears in another. The server only ever hears final, confirmed actions.
+templ ScriptsTab(v scriptsTabView) {
+	<div class="scripts-tab">
+		// No title here: the platform header above this tab already names the
+		// plugin (templates/settings/plugin_header.html), and repeating it put
+		// "Scripts" on screen three times — sidebar, header, and this.
+		<div class="sc-head">
+			// The language picker lives on the creation buttons — the only
+			// moment the choice exists; afterwards the file extension carries it.
+			<span class="sc-new-label">New script:</span>
+			for _, sk := range v.Skins {
+				<button class="sc-btn" data-on:click={ branchkit.MethodPost("new_script", ui.Args("lang", sk.Lang)) }>{ sk.Label }</button>
+			}
+			<button class="sc-btn" data-on:click={ branchkit.MethodPost("open_folder", "") }>Open folder</button>
+		</div>
+		<p class="sc-lede">Scripts in the scripts folder — Lua, JavaScript, TypeScript, or Python, told apart by extension. Saved changes reload instantly: no build, no restart.</p>
+		if len(v.Rows) == 0 {
+			<p class="sc-muted">No scripts yet — <em>New script</em> creates one here; open it with <em>Edit</em>.</p>
+		}
+		for _, r := range v.Rows {
+			@scriptRow(r)
+		}
+		@privilegeRows(v.Privileges)
+		@editorRow(v.Editors)
+	</div>
+}
+
+templ scriptRow(r scriptRowView) {
+	// Row signals: r_=rename form, e_=editor open, b_=editor buffer,
+	// l_=lint verdict.
+	<div class="sc-row" data-signals__ifmissing={ ui.Args("r_"+r.Sig, false, "e_"+r.Sig, false, "b_"+r.Sig, "", "l_"+r.Sig, "") }>
+		// The inline display:none on the data-show elements stays: Datastar
+		// reveals by REMOVING the inline display, so a class saying display:
+		// none would take over at that moment and the element would never
+		// appear.
+		<div class="sc-row-main">
+			<div data-show={ "!$r_" + r.Sig } class="grow">
+				<span class={ r.StatusClass }>{ r.StatusGlyph }</span>
+				<strong>{ r.Name }{ r.Ext }</strong>
+			</div>
+			<div data-show={ "$r_" + r.Sig } class="grow" style="display:none;">
+				<span class={ r.StatusClass }>{ r.StatusGlyph }</span>
+				<input type="text" value={ r.Name } class="sc-rename"/>
+				<button class="sc-btn" data-on:click={ branchkit.MethodPost("rename_script", ui.Args("name", r.Name, "new_name", ui.InputValue)) + "; $r_" + r.Sig + " = false" }>Save</button>
+				<button class="sc-btn" data-on:click={ "$r_" + r.Sig + " = false" }>Cancel</button>
+			</div>
+			<div>
+				if r.Enabled {
+					<button class="sc-btn" data-on:click={ branchkit.MethodPost("set_script_enabled", ui.Args("name", r.Name, "enabled", false)) }>Disable</button>
+				} else {
+					<button class="sc-btn" data-on:click={ branchkit.MethodPost("set_script_enabled", ui.Args("name", r.Name, "enabled", true)) }>Enable</button>
+				}
+				// Edit here seeds the buffer from the content THIS render saw —
+				// stale only if the tab is, and disk changes re-render the tab.
+				<button class="sc-btn" data-on:click={ "$b_" + r.Sig + " = " + ui.JS(r.Src) + "; $l_" + r.Sig + " = ''; $e_" + r.Sig + " = true" }>Edit here</button>
+				<button class="sc-btn" data-on:click={ branchkit.MethodPost("open_script", ui.Args("name", r.Name)) }>Edit</button>
+				<button class="sc-btn" data-on:click={ "$r_" + r.Sig + " = true" }>Rename</button>
+				@templ.Raw(ui.ConfirmButton("Delete", "delete_script", ui.Payload("name", r.Name), ui.Class("sc-btn")))
+			</div>
+		</div>
+		// The declared permission set: the contract the reader of a pasted
+		// script agreed to, and what the host's gates enforce. call:* tokens
+		// carry their live platform-side state — a declared token the user
+		// hasn't granted yet reads differently from a working one.
+		if len(r.Perms) > 0 {
+			<div class="sc-perm">
+				permissions:
+				for i, p := range r.Perms {
+					if i > 0 {
+						{ ", " }
+					}
+					<code>{ p.Token }</code>
+					if p.Note != "" {
+						<span class={ p.NoteClass }>{ " " + p.Note }</span>
+					}
+				}
+			</div>
+		} else {
+			<div class="sc-perm">no permissions header &mdash; dispatch, call, on, emit, and hud calls are refused</div>
+		}
+		// What the script does: its commands (with a Run button where the
+		// pattern is directly invokable) and its event subscriptions.
+		for _, c := range r.Commands {
+			<div class="sc-detail-row">
+				if c.Runnable {
+					<button class="sc-btn sc-btn--run" data-on:click={ branchkit.MethodPost("run_command", ui.Args("script", r.Name, "handler", c.Handler)) }>&#9654; Run</button>
+				}
+				<span>say <em>&ldquo;{ c.Phrase }&rdquo;</em></span>
+				// A mode-gated command matches only while the script holds that
+				// mode, so a row that just said "say X" would be a half-truth.
+				if c.Mode != "" {
+					<span class="sc-mode-note">in mode <code>{ c.Mode }</code></span>
+				}
+			</div>
+		}
+		for _, ev := range r.Events {
+			<div class="sc-detail">on <code>{ ev }</code></div>
+		}
+		// What this script is HOLDING right now, as opposed to what its header
+		// declares. Only rendered when there is something to say, so a quiet
+		// script stays a one-line row.
+		if r.HeldMode != "" {
+			// NOT "only this script's commands match" — exclusive gates union,
+			// so a sibling holder's set is live too. The true statement is about
+			// what is SUPPRESSED.
+			<div class="sc-detail-warn">holding mode <code>{ r.HeldMode }</code> &mdash; ungated commands are suppressed while it is held</div>
+		}
+		if len(r.HeldEffects) > 0 {
+			<div class="sc-detail-warn">
+				holding
+				for i, e := range r.HeldEffects {
+					if i > 0 {
+						{ ", " }
+					}
+					<code>{ e }</code>
+				}
+			</div>
+		}
+		if r.StoredKeys == 1 {
+			<div class="sc-detail">1 stored key</div>
+		} else if r.StoredKeys > 1 {
+			<div class="sc-detail">{ fmt.Sprintf("%d stored keys", r.StoredKeys) }</div>
+		}
+		if !r.Enabled {
+			<div class="sc-detail">disabled &mdash; commands retracted until re-enabled</div>
+		} else if r.RegistersNothing {
+			<div class="sc-detail">registers nothing yet</div>
+		}
+		if r.Enabled && r.LastError != "" {
+			<div class="sc-error">{ r.LastError }</div>
+		}
+		// The in-tab editor: a plain textarea bound to the buffer signal,
+		// linted by the real parser as you type (the verdict arrives via
+		// settings.patch_signals into l_). Save writes the file; the hot reload
+		// it triggers is the same one an external editor gets.
+		<div data-show={ "$e_" + r.Sig } class="sc-editor" style="display:none;">
+			<textarea
+				data-bind={ "b_" + r.Sig }
+				data-on:input__debounce.300ms={ branchkit.MethodPost("lint_script", ui.Args("name", r.Name, "content", ui.Expr("$b_"+r.Sig))) }
+				spellcheck="false"
+				rows="14"
+				class="sc-editor-area"
+			></textarea>
+			<div data-text={ "$l_" + r.Sig } data-show={ "$l_" + r.Sig + " !== ''" } class="sc-editor-err" style="display:none;"></div>
+			<div class="sc-editor-actions">
+				<button class="sc-btn" data-on:click={ branchkit.MethodPost("save_script", ui.Args("name", r.Name, "content", ui.Expr("$b_"+r.Sig))) + "; $e_" + r.Sig + " = false" }>Save</button>
+				<button class="sc-btn" data-on:click={ "$e_" + r.Sig + " = false" }>Cancel</button>
+			</div>
+		</div>
+	</div>
+}
+
+// privilegeRows is the INVERSE view: platform privilege → the scripts that
+// declare it, with the host's live grant state. The per-script rows answer
+// "what does this script want"; this answers "who wants this privilege, and
+// can they have it".
+templ privilegeRows(rows []privRowView) {
+	if len(rows) > 0 {
+		<h3 class="sc-priv-title">Platform privileges</h3>
+		<p class="sc-priv-lede">What your scripts' <code>call:</code> permissions need from the platform. Approving happens in Settings &rarr; Plugins &rarr; Scripts; giving one back is safe to do here.</p>
+		for _, p := range rows {
+			<div class="sc-priv-row">
+				<div class="grow">
+					<code class="sc-priv-name">{ p.Name }</code>
+					<span class={ "sc-state", p.StateClass }>{ p.State }</span>
+					<div class="sc-priv-note">{ p.Note }</div>
+				</div>
+				// Give back only what CAN be given back: optional and currently
+				// held. Unused grants are never auto-returned — that would thrash
+				// consent on ordinary script churn; this is the explicit path.
+				if p.Relinquishable {
+					<button class="sc-btn" data-on:click={ branchkit.MethodPost("relinquish_privilege", ui.Args("privilege", p.Name)) }>Give back</button>
+				}
+			</div>
+		}
+	}
+}
+
+// editorRow is the Editor preference: system default plus every
+// application Launch Services says can open a script file, current choice
+// highlighted.
+templ editorRow(choices []editorChoiceView) {
+	<div class="sc-pref-row">
+		<div class="grow">
+			<div class="sc-pref-title">Editor</div>
+			<div class="sc-priv-note">What the Edit button opens scripts with — every app your system registers for script files.</div>
+		</div>
+		<div>
+			for _, c := range choices {
+				<button class={ "sc-btn", templ.KV("sc-btn--current", c.Current) } data-on:click={ branchkit.MethodPost("set_editor", ui.Args("editor", c.BundleID)) }>{ c.Label }</button>
+			}
+		</div>
+	</div>
+}
