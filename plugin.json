@@ -3,6 +3,7 @@
   "id": "scripts",
   "name": "Scripts",
   "icon": "code",
+  "icon_color": "indigo",
   "version": "0.1.0",
   "min_api_version": "0.2.0",
   "description": "Host for user scripts — Lua, JavaScript, TypeScript, or Python, told apart by extension. Drop a file in the scripts folder and it can add voice commands, react to platform events, dispatch actions, query platform state, and push HUD fragments — all through this plugin's grants.",
