@@ -4,8 +4,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/a-h/templ v0.3.1001 h1:yHDTgexACdJttyiyamcTHXr2QkIeVF1MukLy44EAhMY=
 github.com/a-h/templ v0.3.1001/go.mod h1:oCZcnKRf5jjsGpf2yELzQfodLphd2mwecwG4Crk5HBo=
-github.com/branchkit/plugin-sdk-go v0.18.0 h1:6Nnd4Zev6/ym5VqSpNBQ2+6HQk/ipR9Qn5eSZPCKvwo=
-github.com/branchkit/plugin-sdk-go v0.18.0/go.mod h1:fRlJl1KxGKmeSUfvf7x6kP6N3bY6xnhAqlXhImMK03o=
+github.com/branchkit/plugin-sdk-go v0.24.0 h1:3QGjRj3tU2gXo14gGvUjuS9Kulu++xjoLPeuxsnW2Mc=
+github.com/branchkit/plugin-sdk-go v0.24.0/go.mod h1:fRlJl1KxGKmeSUfvf7x6kP6N3bY6xnhAqlXhImMK03o=
 github.com/dlclark/regexp2/v2 v2.5.2 h1:HAsucWRhsqcDzl6Ua9aR8JwYOTzrZyPrF0/FNxJVAI0=
 github.com/dlclark/regexp2/v2 v2.5.2/go.mod h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=
 github.com/dop251/goja v0.0.0-20260822123354-58e940e0d230 h1:IbnYnQ6X6nkyeAh08QsmZkObNOh/FVtAAmAOFKZ9wys=

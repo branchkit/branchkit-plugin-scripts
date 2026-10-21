@@ -75,7 +75,7 @@ func main() {
 	})
 
 	plugin.SettingsCSS(scriptsCSS)
-	plugin.SettingsTab("scripts", func(_ *branchkit.RenderSettingsRequest) (string, error) {
+	plugin.Page("scripts", func(_ *branchkit.RenderSettingsRequest) (string, error) {
 		return host.renderSettingsTab()
 	})
 

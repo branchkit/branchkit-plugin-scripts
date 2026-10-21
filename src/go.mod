@@ -3,7 +3,7 @@ module github.com/branchkit/branchkit-plugin-scripts
 go 1.25.0
 
 require (
-	github.com/branchkit/plugin-sdk-go v0.18.0
+	github.com/branchkit/plugin-sdk-go v0.24.0
 	github.com/dop251/goja v0.0.0-20260822123354-58e940e0d230
 	github.com/evanw/esbuild v0.28.2
 	github.com/yuin/gopher-lua v1.1.1
