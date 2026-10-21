@@ -152,7 +152,7 @@ maximum).
 
 **Every host starts switched off.** When a script loads, the Scripts plugin
 asks for each `fetch:` host it names; each appears on the Scripts plugin page
-(Settings → Plugins → Scripts) with its switch off until you allow it. A
+(BranchKit → Plugins → Scripts) with its switch off until you allow it. A
 wildcard like `fetch:*.example.com` is asked for one concrete host at a time,
 the first time a fetch reaches it — until you allow it, that fetch fails with a
 message naming the switch.
