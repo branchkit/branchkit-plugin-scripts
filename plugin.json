@@ -1,5 +1,5 @@
 {
-  "$schema": "https://branchkit.dev/schemas/manifest.json",
+  "$schema": "https://branchkit.com/schemas/manifest.json",
   "id": "scripts",
   "name": "Scripts",
   "icon": "code",
