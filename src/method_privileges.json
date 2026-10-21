@@ -379,7 +379,7 @@
     "native.open_system_settings": "system.control",
     "native.open_target": "filesystem",
     "native.open_url": "apps.control",
-    "native.open_with_app": "apps.control",
+    "native.open_with_app": "filesystem",
     "native.optimized_charging": "power",
     "native.pdf_extract_text": "filesystem",
     "native.pdf_page_count": "filesystem",
