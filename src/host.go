@@ -60,6 +60,11 @@ type Host struct {
 	// one, exactly those scripts reload and resume.
 	reqMu     sync.Mutex
 	privWaits map[string]map[string]bool // privilege -> script names
+	// worldWaits records the scripts whose on() subscribed to a window or
+	// world event while Scripts held neither privilege that admits them
+	// (worldEventAdmitters). Its own set, not privWaits: a reload clears
+	// it, and must not drop a call() wait on the same privilege.
+	worldWaits map[string]bool
 
 	// chooseMu guards the single open chooser. Plugin-wide, not per-script:
 	// the choice collection and its exclusive gate are one apiece, so two
@@ -266,12 +271,13 @@ func parsePermissions(src, commentPrefix string) grants {
 
 func NewHost(p *branchkit.Plugin) *Host {
 	h := &Host{
-		plugin:    p,
-		dir:       filepath.Join(branchkit.PluginDataDir(), "scripts"),
-		settings:  branchkit.Settings[Config](p, settingsCollection),
-		scripts:   make(map[string]*Script),
-		privWaits: map[string]map[string]bool{},
-		effects:   map[string]map[string]bool{},
+		plugin:     p,
+		dir:        filepath.Join(branchkit.PluginDataDir(), "scripts"),
+		settings:   branchkit.Settings[Config](p, settingsCollection),
+		scripts:    make(map[string]*Script),
+		privWaits:  map[string]map[string]bool{},
+		worldWaits: map[string]bool{},
+		effects:    map[string]map[string]bool{},
 	}
 	// The state collection is the source of truth for which scripts run.
 	// The settings toggle converges synchronously, but any other writer
@@ -396,20 +402,19 @@ func (h *Host) reconcile() {
 // trouble) — the caller falls back to the manual-approval teaching
 // message.
 func (h *Host) notePrivilegeNeeded(privilege, script, file string) string {
-	return h.notePrivilegeNeededFor(privilege, script, fmt.Sprintf("script '%s' uses call:%s", file, privilege))
-}
-
-// notePrivilegeNeededFor is notePrivilegeNeeded with the reason the request
-// carries spelled out by the caller: on() asks for an event family, not for
-// a call.
-func (h *Host) notePrivilegeNeededFor(privilege, script, reason string) string {
 	h.reqMu.Lock()
 	if h.privWaits[privilege] == nil {
 		h.privWaits[privilege] = map[string]bool{}
 	}
 	h.privWaits[privilege][script] = true
 	h.reqMu.Unlock()
+	return h.requestPrivilege(privilege, script, fmt.Sprintf("script '%s' uses call:%s", file, privilege))
+}
 
+// requestPrivilege files privileges.request for the host, attributed to a
+// script by its reason, and returns the status ("" when the request itself
+// failed). The caller records who waits on the answer.
+func (h *Host) requestPrivilege(privilege, script, reason string) string {
 	res, err := h.plugin.PrivilegesRequest(branchkit.PrivilegesRequestRequest{Privilege: privilege, Reason: &reason})
 	if err != nil {
 		branchkit.Logf("scripts", "[%s] privileges.request(%s): %v", script, privilege, err)
@@ -418,25 +423,21 @@ func (h *Host) notePrivilegeNeededFor(privilege, script, reason string) string {
 	return res.Status
 }
 
-// noteWaiting records that a script waits on a privilege without filing a
-// request for it, so its grant reloads the script (PrivilegeGranted).
-func (h *Host) noteWaiting(privilege, script string) {
+// noteWorldWait records that a script's on() waits on a world-event grant.
+func (h *Host) noteWorldWait(script string) {
 	h.reqMu.Lock()
 	defer h.reqMu.Unlock()
-	if h.privWaits[privilege] == nil {
-		h.privWaits[privilege] = map[string]bool{}
+	if h.worldWaits == nil {
+		h.worldWaits = map[string]bool{}
 	}
-	h.privWaits[privilege][script] = true
+	h.worldWaits[script] = true
 }
 
-// clearWorldWait forgets a script's wait on the privileges that admit world
-// events (worldEventAdmitters).
+// clearWorldWait forgets a script's world-event wait.
 func (h *Host) clearWorldWait(script string) {
 	h.reqMu.Lock()
 	defer h.reqMu.Unlock()
-	for _, priv := range worldEventAdmitters {
-		delete(h.privWaits[priv], script)
-	}
+	delete(h.worldWaits, script)
 }
 
 // privilegeStatus is one entry of the host's own grant state, from
@@ -492,7 +493,7 @@ func (h *Host) privilegeDemand(known []string, states map[string]scriptState) ma
 			}
 		}
 		h.reqMu.Lock()
-		waiting := h.privWaits[worldEventPrivilege][name]
+		waiting := h.worldWaits[name]
 		h.reqMu.Unlock()
 		if waiting && !slices.Contains(demand[worldEventPrivilege], file) {
 			demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
@@ -572,6 +573,15 @@ func (h *Host) PrivilegeGranted(privilege string) {
 	h.reqMu.Lock()
 	waiting := h.privWaits[privilege]
 	delete(h.privWaits, privilege)
+	if slices.Contains(worldEventAdmitters, privilege) && len(h.worldWaits) > 0 {
+		if waiting == nil {
+			waiting = map[string]bool{}
+		}
+		for name := range h.worldWaits {
+			waiting[name] = true
+		}
+		h.worldWaits = map[string]bool{}
+	}
 	h.reqMu.Unlock()
 	if len(waiting) == 0 {
 		return

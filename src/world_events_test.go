@@ -46,9 +46,10 @@ func worldScript(asks *privilegeAsks) *Script {
 		name: "focus",
 		skin: &luaSkin,
 		host: &Host{
-			plugin:    p,
-			known:     []string{"_platform.window.*", "_platform.app.*"},
-			privWaits: map[string]map[string]bool{},
+			plugin:     p,
+			known:      []string{"_platform.window.*", "_platform.app.*"},
+			privWaits:  map[string]map[string]bool{},
+			worldWaits: map[string]bool{},
 		},
 		grants:   parsePermissions("-- permissions: events\n", "--"),
 		handlers: map[string]func() error{},
@@ -89,7 +90,7 @@ func TestOnAWindowEventAsksForEventsWorld(t *testing.T) {
 	if len(asks.asked) != 1 || asks.asked[0] != worldEventPrivilege {
 		t.Fatalf("want one ask for %s, got %v", worldEventPrivilege, asks.asked)
 	}
-	if !s.host.privWaits[worldEventPrivilege]["focus"] {
+	if !s.host.worldWaits["focus"] {
 		t.Fatal("the script must wait on the grant, so the grant reloads it")
 	}
 	if !strings.Contains(s.lastErr, "awaiting approval") {
@@ -132,8 +133,8 @@ func TestTheAskDoesNotHideARowError(t *testing.T) {
 	if s.lastErr != "permissions header: unknown grant" {
 		t.Fatalf("the earlier error must stay, got %q", s.lastErr)
 	}
-	if !s.host.privWaits["windows"]["focus"] {
-		t.Fatal("a later windows grant must reload the waiting script too")
+	if !s.host.worldWaits["focus"] {
+		t.Fatal("a later grant must reload the waiting script")
 	}
 }
 
@@ -152,8 +153,8 @@ func TestWorldEventHeadersDemandEventsWorld(t *testing.T) {
 	write("window.lua", "-- permissions: events:_platform.window.*\n")
 	write("apps.lua", "-- permissions: events:_platform.app.*\n")
 	write("waiting.lua", "-- permissions: events\n")
-	h := &Host{dir: dir, privWaits: map[string]map[string]bool{}}
-	h.noteWaiting(worldEventPrivilege, "waiting")
+	h := &Host{dir: dir, worldWaits: map[string]bool{}}
+	h.noteWorldWait("waiting")
 	got := h.privilegeDemand(nil, map[string]scriptState{})[worldEventPrivilege]
 	want := []string{"waiting.lua", "window.lua"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -161,22 +162,24 @@ func TestWorldEventHeadersDemandEventsWorld(t *testing.T) {
 	}
 }
 
-// A reload starts with no world-event wait: only an on() in this load
-// renews it, so a grant that made it moot or an edit that dropped the
-// subscription no longer keeps a pending events.world request demanded.
-func TestALoadForgetsAnEarlierWorldWait(t *testing.T) {
+// A reload starts with no world-event wait, and clearing it leaves a call()
+// wait on `windows` alone: the grant must still reload that script.
+func TestALoadForgetsOnlyTheWorldWait(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "focus.lua"), []byte("-- permissions: events\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h := &Host{dir: dir, privWaits: map[string]map[string]bool{}}
-	h.noteWaiting(worldEventPrivilege, "focus")
-	h.noteWaiting(worldEventWindows, "focus")
+	h := &Host{dir: dir, privWaits: map[string]map[string]bool{}, worldWaits: map[string]bool{}}
+	h.noteWorldWait("focus")
+	h.privWaits["windows"] = map[string]bool{"focus": true} // a call() wait
 	h.clearWorldWait("focus")
-	if h.privWaits[worldEventPrivilege]["focus"] || h.privWaits[worldEventWindows]["focus"] {
-		t.Fatal("the waits must be gone")
+	if h.worldWaits["focus"] {
+		t.Fatal("the world wait must be gone")
+	}
+	if !h.privWaits["windows"]["focus"] {
+		t.Fatal("the call() wait must stay")
 	}
 	if got := h.privilegeDemand(nil, map[string]scriptState{})[worldEventPrivilege]; len(got) != 0 {
-		t.Fatalf("no demand left, got %v", got)
+		t.Fatalf("no events.world demand left, got %v", got)
 	}
 }

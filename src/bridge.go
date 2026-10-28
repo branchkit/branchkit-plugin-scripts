@@ -190,11 +190,11 @@ func (s *Script) askForWorldEvents(pattern string) {
 			return
 		}
 	}
-	s.host.noteWaiting(worldEventWindows, s.name)
+	s.host.noteWorldWait(s.name)
 	file := s.name + s.skin.ext
 	reason := fmt.Sprintf("script '%s' listens for %s", file, pattern)
 	var note string
-	switch s.host.notePrivilegeNeededFor(worldEventPrivilege, s.name, reason) {
+	switch s.host.requestPrivilege(worldEventPrivilege, s.name, reason) {
 	case "granted", "":
 		// Granted meanwhile (nothing to say), or the request itself
 		// failed (older platform): the subscription stands either way.
