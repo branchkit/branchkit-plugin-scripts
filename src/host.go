@@ -815,6 +815,7 @@ func (h *Host) Start() {
 	// not depend on the thing being hosted. Here the thing it must not
 	// depend on is the host's own previous life.
 	h.reapChoiceRecords()
+	h.migrateStoreKeys()
 	seen := map[string]time.Time{}
 	h.scanOnce(seen)
 	h.reapOrphanRecords()
@@ -1064,6 +1065,51 @@ func ownerOf(owner, id string, names []string) string {
 	return best
 }
 
+// migrateStoreKeys moves store records written under the old
+// `<script>-<key>` id to their scopedName id. Run at start, before any
+// script loads and reads its storage. A record that names its key in `name`
+// is already in the new form. One that does not is placed by ownerOf: its
+// `script` field, or for a record older than that field, the longest script
+// file name its id starts with; that guess is logged, and a record no
+// script's name fits is left where it is.
+func (h *Host) migrateStoreKeys() {
+	recs, err := h.plugin.ListAll(storeCollection)
+	if err != nil {
+		branchkit.Logf("scripts", "store migration: list: %v", err)
+		return
+	}
+	names := h.scriptFiles()
+	for _, r := range recs {
+		var st struct {
+			Key    string `json:"key"`
+			Value  string `json:"value"`
+			Script string `json:"script"`
+			Name   string `json:"name"`
+		}
+		if json.Unmarshal(r.Payload, &st) != nil || st.Name != "" || st.Key == "" {
+			continue
+		}
+		owner := ownerOf(st.Script, st.Key, names)
+		if owner == "" || !strings.HasPrefix(st.Key, owner+"-") {
+			branchkit.Logf("scripts", "store migration: no script owns %q; left as it is", st.Key)
+			continue
+		}
+		if st.Script == "" {
+			branchkit.Logf("scripts", "store migration: %q has no owner field; placed with script %q, the longest name it starts with", st.Key, owner)
+		}
+		key := strings.TrimPrefix(st.Key, owner+"-")
+		id := scopedName(owner, key)
+		rec := map[string]any{"key": id, "value": st.Value, "script": owner, "name": key}
+		if err := h.plugin.Put(storeCollection, id, rec); err != nil {
+			branchkit.Logf("scripts", "store migration: %q: %v", st.Key, err)
+			continue
+		}
+		if _, err := h.plugin.Delete(storeCollection, st.Key); err != nil {
+			branchkit.Logf("scripts", "store migration: drop %q: %v", st.Key, err)
+		}
+	}
+}
+
 // clearStore drops a script's private storage records.
 func (h *Host) clearStore(script string) {
 	recs, err := h.plugin.ListAll(storeCollection)
@@ -1130,10 +1176,14 @@ func (h *Host) heldByScript() (modes map[string]string, effects map[string][]str
 			if json.Unmarshal(r.Payload, &st) != nil {
 				continue
 			}
-			// Records are `<script>-<mode>`, and a script name may hold a
-			// hyphen, so the record's own owner field decides (ownerOf).
+			// The record's own owner field decides (ownerOf); the mode's
+			// name is the rest of its scoped id.
 			if script := ownerOf(st.Script, st.Name, names); script != "" {
-				modes[script] = strings.TrimPrefix(st.Name, script+"-")
+				if owner, mode, ok := splitScoped(st.Name); ok && owner == script {
+					modes[script] = mode
+				} else {
+					modes[script] = strings.TrimPrefix(st.Name, script+"-")
+				}
 			}
 		}
 	}

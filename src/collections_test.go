@@ -191,8 +191,8 @@ func TestStoreKeysAreNamespacedByScript(t *testing.T) {
 	if a == b {
 		t.Fatalf("two scripts' keys collided on %q", a)
 	}
-	if !strings.HasPrefix(a, "headphones-") {
-		t.Fatalf("clearStore scans by the script prefix; %q would be missed", a)
+	if script, key, ok := splitScoped(a); !ok || script != "headphones" || key != "count" {
+		t.Fatalf("%q does not read back as headphones' count", a)
 	}
 }
 

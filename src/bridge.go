@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -396,7 +397,27 @@ const modeCollection = "plugin.scripts.modes"
 // script owning the spoken surface, and a pasted script quietly stealing
 // another's mode is exactly the sloppiness the header exists to catch.
 func (s *Script) modeTag(name string) string {
-	return s.name + "-" + name
+	return scopedName(s.name, name)
+}
+
+// scopedName is a script's own name for a mode or a store key, made unique
+// across scripts: `<len(script)>-<script>-<name>`. A plain
+// `<script>-<name>` was not: script names and keys may both hold a hyphen,
+// so script `focus` storing `timer-x` and script `focus-timer` storing `x`
+// were one record, each reading and overwriting the other's value. The
+// length ends the script name wherever its hyphens fall.
+func scopedName(script, name string) string {
+	return strconv.Itoa(len(script)) + "-" + script + "-" + name
+}
+
+// splitScoped reverses scopedName; ok is false for an id not in its form.
+func splitScoped(id string) (script, name string, ok bool) {
+	digits, rest, found := strings.Cut(id, "-")
+	n, err := strconv.Atoi(digits)
+	if !found || err != nil || n <= 0 || len(rest) < n+1 || rest[n] != '-' {
+		return "", "", false
+	}
+	return rest[:n], rest[n+1:], true
 }
 
 // bridgeMode enters an exclusive mode: while it is held, only commands
@@ -727,12 +748,12 @@ func (s *Script) bridgeDrop(collection, id string) error {
 	return nil
 }
 
-// storeKey namespaces a script's storage key. Same hyphen convention as
-// mode tags, and the same reason: one script must not read or overwrite
+// storeKey namespaces a script's storage key. Same encoding as mode
+// tags (scopedName), and the same reason: one script must not read or overwrite
 // another's, and the encoding is the host's business because a script never
 // sees it.
 func (s *Script) storeKey(key string) string {
-	return s.name + "-" + key
+	return scopedName(s.name, key)
 }
 
 // bridgeStore saves a value under a key private to this script. A nil value
@@ -760,7 +781,7 @@ func (s *Script) bridgeStore(key string, value any) error {
 	if err != nil {
 		return fmt.Errorf("store(%s): %v", key, err)
 	}
-	rec := map[string]any{"key": id, "value": string(encoded), "script": s.name}
+	rec := map[string]any{"key": id, "value": string(encoded), "script": s.name, "name": key}
 	if err := s.host.plugin.Put(storeCollection, id, rec); err != nil {
 		return fmt.Errorf("store(%s): %v", key, err)
 	}

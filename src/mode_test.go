@@ -82,7 +82,7 @@ func TestCommandBindsToTheScriptsModeGate(t *testing.T) {
 	}
 
 	gated, free := s.commands[0], s.commands[1]
-	want := modeCollection + ".notes-editing"
+	want := modeCollection + ".5-notes-editing"
 	if len(gated.RequiresTags) != 1 || gated.RequiresTags[0] != want {
 		t.Fatalf("gated command should require %q, got %v", want, gated.RequiresTags)
 	}
@@ -114,7 +114,7 @@ func TestEnteringCommandDeclaresTheModeTagItSets(t *testing.T) {
 		t.Fatal(err)
 	}
 	entry, gated := s.commands[0], s.commands[1]
-	tag := modeCollection + ".notes-review"
+	tag := modeCollection + ".5-notes-review"
 
 	if len(entry.SetsTags) != 1 || entry.SetsTags[0] != tag {
 		t.Fatalf("entry should set %q, got %v", tag, entry.SetsTags)
@@ -147,10 +147,10 @@ func TestEnteringCommandClearsTheScriptsOtherModes(t *testing.T) {
 	s.resolveModeExits()
 
 	review, editing := s.commands[0], s.commands[1]
-	if len(review.ClearsTags) != 1 || review.ClearsTags[0] != modeCollection+".notes-editing" {
+	if len(review.ClearsTags) != 1 || review.ClearsTags[0] != modeCollection+".5-notes-editing" {
 		t.Fatalf("entering review should clear editing, got %v", review.ClearsTags)
 	}
-	if len(editing.ClearsTags) != 1 || editing.ClearsTags[0] != modeCollection+".notes-review" {
+	if len(editing.ClearsTags) != 1 || editing.ClearsTags[0] != modeCollection+".5-notes-review" {
 		t.Fatalf("entering editing should clear review, got %v", editing.ClearsTags)
 	}
 	// Never clears the one it is entering.
@@ -222,8 +222,8 @@ func TestModeRecordIdAndNameAgree(t *testing.T) {
 	if json.Unmarshal(payload, &back) != nil || back.Name != tag {
 		t.Fatalf("record name should round-trip as the id: %q", back.Name)
 	}
-	if !strings.HasPrefix(back.Name, s.name+"-") {
-		t.Fatalf("clearModes scans by the %q prefix; %q would be missed", s.name+"-", back.Name)
+	if script, mode, ok := splitScoped(back.Name); !ok || script != s.name || mode != "editing" {
+		t.Fatalf("%q does not read back as %s's editing mode", back.Name, s.name)
 	}
 }
 
