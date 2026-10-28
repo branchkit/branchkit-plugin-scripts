@@ -130,7 +130,61 @@ func (s *Script) registerEvent(pattern string, fn func(payload any) error) error
 		branchkit.Logf("scripts", "[%s] %s", s.name, s.lastErr)
 	}
 	s.events[pattern] = append(s.events[pattern], fn)
+	s.askForWorldEvents(pattern)
 	return nil
+}
+
+// worldEventPrivilege gates the platform's window and world events (the
+// `world` event family). The host declares it optional, so until the user
+// approves it those events never reach a script that subscribes to them.
+const worldEventPrivilege = "events.world"
+
+// worldEvents are the platform events in the `world` family
+// (contracts/platform-events.json). The SDK carries no family data, so they
+// are named here; a family member added there and missed here only means
+// the ask is not filed for it.
+var worldEvents = []string{
+	"_platform.window.closed",
+	"_platform.window.created",
+	"_platform.window.focused",
+	"_platform.window.frame_changed",
+	"_platform.window.title_changed",
+	"_platform.world.updated",
+}
+
+// reachesWorldEvents reports whether a subscription pattern can match one
+// of the world family's events.
+func reachesWorldEvents(pattern string) bool {
+	for _, ev := range worldEvents {
+		if patternsOverlap(pattern, ev) {
+			return true
+		}
+	}
+	return false
+}
+
+// askForWorldEvents files privileges.request('events.world') for this
+// script when on() subscribes to a window or world event, the way call()
+// asks for the privilege it needs: attributed to the script, shown on its
+// row while pending, and the script reloads when it is granted. Without
+// this such a script was quiet, with no visible reason, until the user
+// found the grant. Once per load: the first world subscription asks.
+func (s *Script) askForWorldEvents(pattern string) {
+	if s.worldAsked || !reachesWorldEvents(pattern) {
+		return
+	}
+	s.worldAsked = true
+	file := s.name + s.skin.ext
+	reason := fmt.Sprintf("script '%s' listens for %s", file, pattern)
+	switch s.host.notePrivilegeNeededFor(worldEventPrivilege, s.name, reason) {
+	case "granted", "":
+		// Already held (nothing to say), or the request itself failed
+		// (older platform): the subscription stands either way.
+	case "denied":
+		s.lastErr = fmt.Sprintf("on(%q): the '%s' privilege was dismissed earlier, so these events do not arrive — grant it under Settings → Plugins → Scripts → Privileges to change that", pattern, worldEventPrivilege)
+	default: // "pending"
+		s.lastErr = fmt.Sprintf("on(%q): awaiting approval — '%s' for Scripts is a pending request on the Plugins page; this script reloads when it is granted", pattern, worldEventPrivilege)
+	}
 }
 
 // bridgeDispatch fires an action through the host's dispatch grant and

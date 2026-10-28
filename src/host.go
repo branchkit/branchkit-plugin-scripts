@@ -152,10 +152,12 @@ type Script struct {
 	handlers map[string]func() error // handler id -> command callback
 	nextID   int
 	events   map[string][]func(payload any) error // event pattern -> callbacks
-	timers   map[string]*time.Timer               // timer id -> live timer; cancel() and fired one-shots remove
-	commands []branchkit.CommandSpec
-	infos    []cmdInfo // settings-tab display metadata, parallel to handlers
-	lastErr  string
+	// worldAsked: this load already asked for events.world (askForWorldEvents).
+	worldAsked bool
+	timers     map[string]*time.Timer // timer id -> live timer; cancel() and fired one-shots remove
+	commands   []branchkit.CommandSpec
+	infos      []cmdInfo // settings-tab display metadata, parallel to handlers
+	lastErr    string
 	// dispatchErr is why the most recent dispatch() soft-failed, read back
 	// by failed(). Separate from lastErr, which is the SETTINGS ROW's error
 	// and is written by load failures, refusals and every other bridged
@@ -394,6 +396,13 @@ func (h *Host) reconcile() {
 // trouble) — the caller falls back to the manual-approval teaching
 // message.
 func (h *Host) notePrivilegeNeeded(privilege, script, file string) string {
+	return h.notePrivilegeNeededFor(privilege, script, fmt.Sprintf("script '%s' uses call:%s", file, privilege))
+}
+
+// notePrivilegeNeededFor is notePrivilegeNeeded with the reason the request
+// carries spelled out by the caller: on() asks for an event family, not for
+// a call.
+func (h *Host) notePrivilegeNeededFor(privilege, script, reason string) string {
 	h.reqMu.Lock()
 	if h.privWaits[privilege] == nil {
 		h.privWaits[privilege] = map[string]bool{}
@@ -401,7 +410,6 @@ func (h *Host) notePrivilegeNeeded(privilege, script, file string) string {
 	h.privWaits[privilege][script] = true
 	h.reqMu.Unlock()
 
-	reason := fmt.Sprintf("script '%s' uses call:%s", file, privilege)
 	res, err := h.plugin.PrivilegesRequest(branchkit.PrivilegesRequestRequest{Privilege: privilege, Reason: &reason})
 	if err != nil {
 		branchkit.Logf("scripts", "[%s] privileges.request(%s): %v", script, privilege, err)
@@ -453,6 +461,13 @@ func (h *Host) privilegeDemand(known []string, states map[string]scriptState) ma
 			}
 			if priv, isCall := strings.CutPrefix(tok, "call:"); isCall {
 				demand[priv] = append(demand[priv], file)
+			}
+			// An events grant that can reach a window or world event demands
+			// events.world, which on() asks for (worldEventPrivilege).
+			if tok == "events" {
+				demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
+			} else if pattern, isEvents := strings.CutPrefix(tok, "events:"); isEvents && reachesWorldEvents(pattern) {
+				demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
 			}
 		}
 	}
