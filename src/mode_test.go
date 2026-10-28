@@ -226,3 +226,24 @@ func TestModeRecordIdAndNameAgree(t *testing.T) {
 		t.Fatalf("clearModes scans by the %q prefix; %q would be missed", s.name+"-", back.Name)
 	}
 }
+
+// A record names its owning script, so tearing down `focus` leaves
+// `focus-timer`'s modes and storage alone. A record written before the
+// field existed falls back to the id prefix.
+func TestRecordsBelongToTheScriptThatNamesItself(t *testing.T) {
+	cases := []struct {
+		owner, id, script string
+		want              bool
+	}{
+		{"focus-timer", "focus-timer-review", "focus", false},
+		{"focus-timer", "focus-timer-review", "focus-timer", true},
+		{"focus", "focus-review", "focus", true},
+		{"", "focus-review", "focus", true},  // legacy record
+		{"", "other-review", "focus", false}, // legacy, someone else's
+	}
+	for _, c := range cases {
+		if got := ownedBy(c.owner, c.id, c.script); got != c.want {
+			t.Errorf("ownedBy(%q, %q, %q) = %v, want %v", c.owner, c.id, c.script, got, c.want)
+		}
+	}
+}

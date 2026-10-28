@@ -1045,6 +1045,18 @@ func (h *Host) unloadLocked(name string) {
 	go h.clearStore(name)
 }
 
+// ownedBy reports whether a mode or store record belongs to script. A record
+// names its owner in `script`; the id prefix (`<script>-`) cannot, because a
+// script name may itself contain a hyphen, so tearing down `focus` used to
+// delete `focus-timer`'s records too. A record written before the field
+// existed falls back to the prefix.
+func ownedBy(owner, id, script string) bool {
+	if owner != "" {
+		return owner == script
+	}
+	return strings.HasPrefix(id, script+"-")
+}
+
 // clearStore drops a script's private storage records.
 func (h *Host) clearStore(script string) {
 	recs, err := h.plugin.ListAll(storeCollection)
@@ -1052,12 +1064,12 @@ func (h *Host) clearStore(script string) {
 		branchkit.Logf("scripts", "[%s] store list: %v", script, err)
 		return
 	}
-	prefix := script + "-"
 	for _, r := range recs {
 		var st struct {
-			Key string `json:"key"`
+			Key    string `json:"key"`
+			Script string `json:"script"`
 		}
-		if json.Unmarshal(r.Payload, &st) != nil || !strings.HasPrefix(st.Key, prefix) {
+		if json.Unmarshal(r.Payload, &st) != nil || !ownedBy(st.Script, st.Key, script) {
 			continue
 		}
 		if _, err := h.plugin.Delete(storeCollection, st.Key); err != nil {
@@ -1158,12 +1170,12 @@ func (h *Host) clearModes(script string) {
 		branchkit.Logf("scripts", "[%s] mode list: %v", script, err)
 		return
 	}
-	prefix := script + "-"
 	for _, r := range recs {
 		var st struct {
-			Name string `json:"name"`
+			Name   string `json:"name"`
+			Script string `json:"script"`
 		}
-		if json.Unmarshal(r.Payload, &st) != nil || !strings.HasPrefix(st.Name, prefix) {
+		if json.Unmarshal(r.Payload, &st) != nil || !ownedBy(st.Script, st.Name, script) {
 			continue
 		}
 		if _, err := h.plugin.Delete(modeCollection, st.Name); err != nil {

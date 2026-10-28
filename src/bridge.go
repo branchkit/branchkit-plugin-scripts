@@ -425,7 +425,7 @@ func (s *Script) bridgeMode(name string) error {
 	}
 	s.host.clearModes(s.name)
 	tag := s.modeTag(name)
-	if err := s.host.plugin.Put(modeCollection, tag, map[string]any{"name": tag}); err != nil {
+	if err := s.host.plugin.Put(modeCollection, tag, map[string]any{"name": tag, "script": s.name}); err != nil {
 		s.lastErr = fmt.Sprintf("mode(%s): %v", name, err)
 		branchkit.Logf("scripts", "[%s] %s", s.name, s.lastErr)
 	}
@@ -760,7 +760,7 @@ func (s *Script) bridgeStore(key string, value any) error {
 	if err != nil {
 		return fmt.Errorf("store(%s): %v", key, err)
 	}
-	rec := map[string]any{"key": id, "value": string(encoded)}
+	rec := map[string]any{"key": id, "value": string(encoded), "script": s.name}
 	if err := s.host.plugin.Put(storeCollection, id, rec); err != nil {
 		return fmt.Errorf("store(%s): %v", key, err)
 	}

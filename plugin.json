@@ -212,7 +212,8 @@
         "writers": "introducer_only",
         "exclusive": true,
         "fields": [
-          { "key": "name", "label": "Mode", "field_type": "string", "required": true }
+          { "key": "name", "label": "Mode", "field_type": "string", "required": true },
+          { "key": "script", "label": "Script", "field_type": "string", "required": false }
         ],
         "feeds_matching": { "type": "as_gates", "name_field": "name", "scoped": true },
         "label": "Script modes",
@@ -226,7 +227,8 @@
         "label": "Script storage",
         "fields": [
           { "key": "key", "label": "Key", "field_type": "string", "required": true },
-          { "key": "value", "label": "Value", "field_type": "string", "required": false }
+          { "key": "value", "label": "Value", "field_type": "string", "required": false },
+          { "key": "script", "label": "Script", "field_type": "string", "required": false }
         ],
         "description": "Per-script persistence, one record per script and key. Keys are namespaced by script, so one script cannot read or overwrite another's. Values are JSON. Reached through store() and stored(); the records are deleted with their script, so storage inherits reload and delete semantics for free."
       },
