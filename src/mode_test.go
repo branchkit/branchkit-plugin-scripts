@@ -228,22 +228,22 @@ func TestModeRecordIdAndNameAgree(t *testing.T) {
 }
 
 // A record names its owning script, so tearing down `focus` leaves
-// `focus-timer`'s modes and storage alone. A record written before the
-// field existed falls back to the id prefix.
+// `focus-timer`'s modes and storage alone. A record written before the field
+// existed goes to the longest script name its id starts with.
 func TestRecordsBelongToTheScriptThatNamesItself(t *testing.T) {
+	names := []string{"focus", "focus-timer", "other"}
 	cases := []struct {
-		owner, id, script string
-		want              bool
+		owner, id, want string
 	}{
-		{"focus-timer", "focus-timer-review", "focus", false},
-		{"focus-timer", "focus-timer-review", "focus-timer", true},
-		{"focus", "focus-review", "focus", true},
-		{"", "focus-review", "focus", true},  // legacy record
-		{"", "other-review", "focus", false}, // legacy, someone else's
+		{"focus-timer", "focus-timer-review", "focus-timer"},
+		{"focus", "focus-timer-review", "focus"}, // the field decides
+		{"", "focus-review", "focus"},            // legacy
+		{"", "focus-timer-x", "focus-timer"},     // legacy, longest name wins
+		{"", "gone-x", ""},                       // legacy, no such script
 	}
 	for _, c := range cases {
-		if got := ownedBy(c.owner, c.id, c.script); got != c.want {
-			t.Errorf("ownedBy(%q, %q, %q) = %v, want %v", c.owner, c.id, c.script, got, c.want)
+		if got := ownerOf(c.owner, c.id, names); got != c.want {
+			t.Errorf("ownerOf(%q, %q) = %q, want %q", c.owner, c.id, got, c.want)
 		}
 	}
 }

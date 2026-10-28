@@ -1045,16 +1045,23 @@ func (h *Host) unloadLocked(name string) {
 	go h.clearStore(name)
 }
 
-// ownedBy reports whether a mode or store record belongs to script. A record
+// ownerOf names the script a mode or store record belongs to. A record
 // names its owner in `script`; the id prefix (`<script>-`) cannot, because a
 // script name may itself contain a hyphen, so tearing down `focus` used to
 // delete `focus-timer`'s records too. A record written before the field
-// existed falls back to the prefix.
-func ownedBy(owner, id, script string) bool {
+// existed goes to the longest of `names` its id starts with, so `focus-timer`
+// keeps its old records while `focus` exists; "" when none matches.
+func ownerOf(owner, id string, names []string) string {
 	if owner != "" {
-		return owner == script
+		return owner
 	}
-	return strings.HasPrefix(id, script+"-")
+	best := ""
+	for _, n := range names {
+		if len(n) > len(best) && strings.HasPrefix(id, n+"-") {
+			best = n
+		}
+	}
+	return best
 }
 
 // clearStore drops a script's private storage records.
@@ -1064,12 +1071,13 @@ func (h *Host) clearStore(script string) {
 		branchkit.Logf("scripts", "[%s] store list: %v", script, err)
 		return
 	}
+	names := append(h.scriptFiles(), script)
 	for _, r := range recs {
 		var st struct {
 			Key    string `json:"key"`
 			Script string `json:"script"`
 		}
-		if json.Unmarshal(r.Payload, &st) != nil || !ownedBy(st.Script, st.Key, script) {
+		if json.Unmarshal(r.Payload, &st) != nil || ownerOf(st.Script, st.Key, names) != script {
 			continue
 		}
 		if _, err := h.plugin.Delete(storeCollection, st.Key); err != nil {
@@ -1111,20 +1119,21 @@ func (h *Host) onChildExit(name string, s *Script, msg string) {
 // than as an error, because this is an annotation on a row, not the row.
 func (h *Host) heldByScript() (modes map[string]string, effects map[string][]string, stored map[string]int) {
 	modes, effects, stored = map[string]string{}, map[string][]string{}, map[string]int{}
+	names := h.scriptFiles()
 
 	if recs, err := h.plugin.ListAll(modeCollection); err == nil {
 		for _, r := range recs {
 			var st struct {
-				Name string `json:"name"`
+				Name   string `json:"name"`
+				Script string `json:"script"`
 			}
 			if json.Unmarshal(r.Payload, &st) != nil {
 				continue
 			}
-			// Records are `<script>-<mode>`; split on the first hyphen, which
-			// is the host's own encoding, so a mode name containing one is
-			// still attributed to the right script.
-			if script, mode, ok := strings.Cut(st.Name, "-"); ok {
-				modes[script] = mode
+			// Records are `<script>-<mode>`, and a script name may hold a
+			// hyphen, so the record's own owner field decides (ownerOf).
+			if script := ownerOf(st.Script, st.Name, names); script != "" {
+				modes[script] = strings.TrimPrefix(st.Name, script+"-")
 			}
 		}
 	}
@@ -1143,12 +1152,13 @@ func (h *Host) heldByScript() (modes map[string]string, effects map[string][]str
 	if recs, err := h.plugin.ListAll(storeCollection); err == nil {
 		for _, r := range recs {
 			var st struct {
-				Key string `json:"key"`
+				Key    string `json:"key"`
+				Script string `json:"script"`
 			}
 			if json.Unmarshal(r.Payload, &st) != nil {
 				continue
 			}
-			if script, _, ok := strings.Cut(st.Key, "-"); ok {
+			if script := ownerOf(st.Script, st.Key, names); script != "" {
 				stored[script]++
 			}
 		}
@@ -1170,12 +1180,16 @@ func (h *Host) clearModes(script string) {
 		branchkit.Logf("scripts", "[%s] mode list: %v", script, err)
 		return
 	}
+	// Mode records are held tags, released when the plugin restarts, so
+	// none written before the owner field outlives an update: no other
+	// script names are needed to place one.
+	names := []string{script}
 	for _, r := range recs {
 		var st struct {
 			Name   string `json:"name"`
 			Script string `json:"script"`
 		}
-		if json.Unmarshal(r.Payload, &st) != nil || !ownedBy(st.Script, st.Name, script) {
+		if json.Unmarshal(r.Payload, &st) != nil || ownerOf(st.Script, st.Name, names) != script {
 			continue
 		}
 		if _, err := h.plugin.Delete(modeCollection, st.Name); err != nil {
