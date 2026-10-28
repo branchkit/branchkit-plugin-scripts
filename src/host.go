@@ -429,6 +429,16 @@ func (h *Host) noteWaiting(privilege, script string) {
 	h.privWaits[privilege][script] = true
 }
 
+// clearWorldWait forgets a script's wait on the privileges that admit world
+// events (worldEventAdmitters).
+func (h *Host) clearWorldWait(script string) {
+	h.reqMu.Lock()
+	defer h.reqMu.Unlock()
+	for _, priv := range worldEventAdmitters {
+		delete(h.privWaits[priv], script)
+	}
+}
+
 // privilegeStatus is one entry of the host's own grant state, from
 // privileges.list — what lets each script row say whether its query:*
 // tokens are actually usable right now.
@@ -929,6 +939,10 @@ func (h *Host) loadLocked(name string) {
 		return
 	}
 	h.teardown(name)
+	// A world-event wait stands only while this load's on() renews it: an
+	// edit that dropped the subscription, or a grant that made it moot, must
+	// not keep a pending request alive (privilegeDemand counts waits).
+	h.clearWorldWait(name)
 
 	path, sk, ok := h.findScript(name)
 	if !ok {

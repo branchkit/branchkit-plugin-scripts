@@ -160,3 +160,23 @@ func TestWorldEventHeadersDemandEventsWorld(t *testing.T) {
 		t.Fatalf("events.world demand = %v, want %v", got, want)
 	}
 }
+
+// A reload starts with no world-event wait: only an on() in this load
+// renews it, so a grant that made it moot or an edit that dropped the
+// subscription no longer keeps a pending events.world request demanded.
+func TestALoadForgetsAnEarlierWorldWait(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "focus.lua"), []byte("-- permissions: events\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{dir: dir, privWaits: map[string]map[string]bool{}}
+	h.noteWaiting(worldEventPrivilege, "focus")
+	h.noteWaiting(worldEventWindows, "focus")
+	h.clearWorldWait("focus")
+	if h.privWaits[worldEventPrivilege]["focus"] || h.privWaits[worldEventWindows]["focus"] {
+		t.Fatal("the waits must be gone")
+	}
+	if got := h.privilegeDemand(nil, map[string]scriptState{})[worldEventPrivilege]; len(got) != 0 {
+		t.Fatalf("no demand left, got %v", got)
+	}
+}
