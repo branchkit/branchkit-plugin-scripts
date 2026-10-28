@@ -139,6 +139,13 @@ func (s *Script) registerEvent(pattern string, fn func(payload any) error) error
 // approves it those events never reach a script that subscribes to them.
 const worldEventPrivilege = "events.world"
 
+// worldEventWindows is the other privilege that admits the world family:
+// the platform delivers it to a holder of `windows` too.
+const worldEventWindows = "windows"
+
+// worldEventAdmitters: holding either privilege admits the world family.
+var worldEventAdmitters = []string{worldEventPrivilege, worldEventWindows}
+
 // worldEvents are the platform events in the `world` family
 // (contracts/platform-events.json). The SDK carries no family data, so they
 // are named here; a family member added there and missed here only means
@@ -174,16 +181,32 @@ func (s *Script) askForWorldEvents(pattern string) {
 		return
 	}
 	s.worldAsked = true
+	// The platform delivers the world family to a holder of either
+	// privilege, so a host holding `windows` already gets these events.
+	// Either grant arriving later reloads the script.
+	status := s.host.privilegeStatuses()
+	for _, priv := range worldEventAdmitters {
+		if status[priv].Granted {
+			return
+		}
+	}
+	s.host.noteWaiting(worldEventWindows, s.name)
 	file := s.name + s.skin.ext
 	reason := fmt.Sprintf("script '%s' listens for %s", file, pattern)
+	var note string
 	switch s.host.notePrivilegeNeededFor(worldEventPrivilege, s.name, reason) {
 	case "granted", "":
-		// Already held (nothing to say), or the request itself failed
-		// (older platform): the subscription stands either way.
+		// Granted meanwhile (nothing to say), or the request itself
+		// failed (older platform): the subscription stands either way.
 	case "denied":
-		s.lastErr = fmt.Sprintf("on(%q): the '%s' privilege was dismissed earlier, so these events do not arrive — grant it under Settings → Plugins → Scripts → Privileges to change that", pattern, worldEventPrivilege)
+		note = fmt.Sprintf("on(%q): the '%s' privilege was dismissed earlier, so these events do not arrive — grant it under Settings → Plugins → Scripts → Privileges to change that", pattern, worldEventPrivilege)
 	default: // "pending"
-		s.lastErr = fmt.Sprintf("on(%q): awaiting approval — '%s' for Scripts is a pending request on the Plugins page; this script reloads when it is granted", pattern, worldEventPrivilege)
+		note = fmt.Sprintf("on(%q): awaiting approval — '%s' for Scripts is a pending request on the Plugins page; this script reloads when it is granted", pattern, worldEventPrivilege)
+	}
+	// An error the row already shows (a header typo) is the one to fix
+	// first; this note must not hide it.
+	if note != "" && s.lastErr == "" {
+		s.lastErr = note
 	}
 }
 

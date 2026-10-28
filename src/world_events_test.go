@@ -15,11 +15,20 @@ import (
 // every privilege asked for: the platform's half of the ask, and nothing
 // else.
 type privilegeAsks struct {
-	status string
-	asked  []string
+	status  string
+	granted []string // privileges privileges.list reports held
+	asked   []string
 }
 
 func (f *privilegeAsks) Call(method string, params any, result any) error {
+	if method == branchkit.MethodPrivilegesList {
+		entries := []map[string]any{}
+		for _, p := range f.granted {
+			entries = append(entries, map[string]any{"privilege": p, "granted": true})
+		}
+		raw, _ := json.Marshal(map[string]any{"privileges": entries})
+		return json.Unmarshal(raw, result)
+	}
 	if method == branchkit.MethodPrivilegesRequest {
 		if req, ok := params.(*branchkit.PrivilegesRequestRequest); ok {
 			f.asked = append(f.asked, req.Privilege)
@@ -99,19 +108,39 @@ func TestOnOtherEventsOrAHeldGrantSaysNothing(t *testing.T) {
 		t.Fatalf("a non-world event must not ask, got %v", asks.asked)
 	}
 
-	held := &privilegeAsks{status: "granted"}
-	s = worldScript(held)
+	// Either privilege that admits the world family is enough: the platform
+	// delivers these events to a holder of `windows` too.
+	for _, priv := range []string{"events.world", "windows"} {
+		held := &privilegeAsks{status: "pending", granted: []string{priv}}
+		s = worldScript(held)
+		if err := s.registerEvent("_platform.window.focused", func(any) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if len(held.asked) != 0 || s.lastErr != "" {
+			t.Fatalf("holding %s: want no ask and no note, got %v / %q", priv, held.asked, s.lastErr)
+		}
+	}
+}
+
+// An error already on the row (a header typo) is not replaced by the note.
+func TestTheAskDoesNotHideARowError(t *testing.T) {
+	s := worldScript(&privilegeAsks{status: "pending"})
+	s.lastErr = "permissions header: unknown grant"
 	if err := s.registerEvent("_platform.window.focused", func(any) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if s.lastErr != "" {
-		t.Fatalf("a held grant needs no note, got %q", s.lastErr)
+	if s.lastErr != "permissions header: unknown grant" {
+		t.Fatalf("the earlier error must stay, got %q", s.lastErr)
+	}
+	if !s.host.privWaits["windows"]["focus"] {
+		t.Fatal("a later windows grant must reload the waiting script too")
 	}
 }
 
 // A pending events.world request stays wanted while an enabled script's
-// header can reach a world event; otherwise withdrawStaleRequests would give
-// back the very request on() just filed.
+// header names a world event, or while a script's on() waits on it;
+// otherwise withdrawStaleRequests would give back the very request on()
+// just filed. A bare `events` header alone says nothing about which events.
 func TestWorldEventHeadersDemandEventsWorld(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, src string) {
@@ -122,9 +151,11 @@ func TestWorldEventHeadersDemandEventsWorld(t *testing.T) {
 	write("bare.lua", "-- permissions: events\n")
 	write("window.lua", "-- permissions: events:_platform.window.*\n")
 	write("apps.lua", "-- permissions: events:_platform.app.*\n")
-	h := &Host{dir: dir}
+	write("waiting.lua", "-- permissions: events\n")
+	h := &Host{dir: dir, privWaits: map[string]map[string]bool{}}
+	h.noteWaiting(worldEventPrivilege, "waiting")
 	got := h.privilegeDemand(nil, map[string]scriptState{})[worldEventPrivilege]
-	want := []string{"bare.lua", "window.lua"}
+	want := []string{"waiting.lua", "window.lua"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("events.world demand = %v, want %v", got, want)
 	}

@@ -418,6 +418,17 @@ func (h *Host) notePrivilegeNeededFor(privilege, script, reason string) string {
 	return res.Status
 }
 
+// noteWaiting records that a script waits on a privilege without filing a
+// request for it, so its grant reloads the script (PrivilegeGranted).
+func (h *Host) noteWaiting(privilege, script string) {
+	h.reqMu.Lock()
+	defer h.reqMu.Unlock()
+	if h.privWaits[privilege] == nil {
+		h.privWaits[privilege] = map[string]bool{}
+	}
+	h.privWaits[privilege][script] = true
+}
+
 // privilegeStatus is one entry of the host's own grant state, from
 // privileges.list — what lets each script row say whether its query:*
 // tokens are actually usable right now.
@@ -462,13 +473,19 @@ func (h *Host) privilegeDemand(known []string, states map[string]scriptState) ma
 			if priv, isCall := strings.CutPrefix(tok, "call:"); isCall {
 				demand[priv] = append(demand[priv], file)
 			}
-			// An events grant that can reach a window or world event demands
-			// events.world, which on() asks for (worldEventPrivilege).
-			if tok == "events" {
-				demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
-			} else if pattern, isEvents := strings.CutPrefix(tok, "events:"); isEvents && reachesWorldEvents(pattern) {
+			// A grant naming a window or world event pattern demands
+			// events.world, which on() asks for (worldEventPrivilege). A bare
+			// `events` grant says nothing about which events; a script
+			// holding one demands it only while on() is waiting on it (below).
+			if pattern, isEvents := strings.CutPrefix(tok, "events:"); isEvents && reachesWorldEvents(pattern) {
 				demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
 			}
+		}
+		h.reqMu.Lock()
+		waiting := h.privWaits[worldEventPrivilege][name]
+		h.reqMu.Unlock()
+		if waiting && !slices.Contains(demand[worldEventPrivilege], file) {
+			demand[worldEventPrivilege] = append(demand[worldEventPrivilege], file)
 		}
 	}
 	for priv := range demand {
