@@ -24,7 +24,8 @@
     "privileges": [
       "dispatch",
       "filesystem",
-      "apps"
+      "apps",
+      "exec.own"
     ],
     "optional_privileges": [
       "apps.control",
@@ -66,6 +67,7 @@
     "runtimes": ["python"],
     "protected_reads": ["password_managers", "branchkit_windows"],
     "reasons": {
+      "privilege:exec.own": "To run your Python scripts: each runs in its own Python process, inside this plugin's sandbox.",
       "protected_read:password_managers": "So a script you write can read what a password manager's window shows. Off until you turn it on.",
       "protected_read:branchkit_windows": "So a script you write can read BranchKit's own windows, its permission prompt among them, for example to speak them aloud. Off until you turn it on."
     }

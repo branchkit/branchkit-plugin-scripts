@@ -682,6 +682,7 @@
     "events.output": "reads",
     "events.speech": "reads",
     "events.world": "reads",
+    "exec.own": "neither",
     "filesystem": "acts",
     "finder": "reads",
     "hardware": "reads",
@@ -741,6 +742,7 @@
     "events.output": "moderate",
     "events.speech": "dangerous",
     "events.world": "low",
+    "exec.own": "moderate",
     "filesystem": "dangerous",
     "finder": "low",
     "hardware": "low",
@@ -783,6 +785,7 @@
     "windows": "moderate"
   },
   "sandbox_privileges": [
+    "exec.own",
     "shell",
     "stage.audio_devices",
     "stage.displays",
