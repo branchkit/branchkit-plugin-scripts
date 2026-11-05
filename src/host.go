@@ -1047,15 +1047,28 @@ func (h *Host) unloadLocked(name string) {
 }
 
 // ownerOf names the script a mode or store record belongs to. A record
-// names its owner in `script`; the id prefix (`<script>-`) cannot, because a
-// script name may itself contain a hyphen, so tearing down `focus` used to
-// delete `focus-timer`'s records too. A record written before the field
-// existed goes to the longest of `names` its id starts with, so `focus-timer`
-// keeps its old records while `focus` exists; "" when none matches.
+// names its owner in `script`. One without that field is read from its id:
+// a scoped id (scopedName) names its script exactly. That is every mode
+// entered by voice, because the platform writes that record from the
+// command's `sets_tags` and it carries only `name`. An id in the old
+// `<script>-<key>` form goes to legacyOwnerOf.
 func ownerOf(owner, id string, names []string) string {
 	if owner != "" {
 		return owner
 	}
+	if script, _, ok := splitScoped(id); ok {
+		return script
+	}
+	return legacyOwnerOf(id, names)
+}
+
+// legacyOwnerOf places a record written before ids were scoped and before
+// the `script` field existed. Its id prefix (`<script>-`) cannot name the
+// owner alone, because a script name may itself contain a hyphen, so tearing
+// down `focus` used to delete `focus-timer`'s records too: the record goes to
+// the longest of `names` its id starts with, so `focus-timer` keeps its old
+// records while `focus` exists; "" when none matches.
+func legacyOwnerOf(id string, names []string) string {
 	best := ""
 	for _, n := range names {
 		if len(n) > len(best) && strings.HasPrefix(id, n+"-") {
@@ -1089,7 +1102,12 @@ func (h *Host) migrateStoreKeys() {
 		if json.Unmarshal(r.Payload, &st) != nil || st.Name != "" || st.Key == "" {
 			continue
 		}
-		owner := ownerOf(st.Script, st.Key, names)
+		// Every record here is in the old form (no `name`), so its id is
+		// never read as a scoped one: an old id can happen to parse as one.
+		owner := st.Script
+		if owner == "" {
+			owner = legacyOwnerOf(st.Key, names)
+		}
 		if owner == "" || !strings.HasPrefix(st.Key, owner+"-") {
 			branchkit.Logf("scripts", "store migration: no script owns %q; left as it is", st.Key)
 			continue
@@ -1231,8 +1249,9 @@ func (h *Host) clearModes(script string) {
 		return
 	}
 	// Mode records are held tags, released when the plugin restarts, so
-	// none written before the owner field outlives an update: no other
-	// script names are needed to place one.
+	// none written before scoped ids outlives an update: no other script
+	// names are needed to place one. A mode entered by voice has no owner
+	// field; ownerOf reads its owner from the scoped id.
 	names := []string{script}
 	for _, r := range recs {
 		var st struct {

@@ -141,3 +141,43 @@ func TestStoreKeysMoveToTheScopedForm(t *testing.T) {
 		t.Errorf("stored(timer-x) = %v, %v", got, err)
 	}
 }
+
+// A mode entered by voice is written by the platform from the command's
+// `sets_tags`, so its record holds only `name`, the scoped id, and no
+// `script` field. The id still names its owner: teardown must clear it and
+// the Settings row must show it, while another script's voice-entered mode
+// stays put.
+func TestVoiceEnteredModesBelongToTheScriptTheirIdNames(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"focus.lua", "focus-timer.lua"} {
+		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := func(fields map[string]any) json.RawMessage {
+		raw, _ := json.Marshal(fields)
+		return raw
+	}
+	focus := modeScript("focus", "-- permissions: mode\n").modeTag("review")
+	timer := modeScript("focus-timer", "-- permissions: mode\n").modeTag("review")
+	store := &memStore{records: map[string]json.RawMessage{
+		focus: rec(map[string]any{"name": focus}),
+		timer: rec(map[string]any{"name": timer}),
+	}}
+	p := branchkit.NewDetachedPlugin()
+	p.Methods = branchkit.NewMethods(store)
+	h := &Host{plugin: p, dir: dir}
+
+	modes, _, _ := h.heldByScript()
+	if modes["focus"] != "review" || modes["focus-timer"] != "review" {
+		t.Errorf("held modes = %v, want both scripts in review", modes)
+	}
+
+	h.clearModes("focus")
+	if _, ok := store.records[focus]; ok {
+		t.Errorf("clearModes(focus) left its voice-entered mode %q", focus)
+	}
+	if _, ok := store.records[timer]; !ok {
+		t.Errorf("clearModes(focus) removed focus-timer's mode %q", timer)
+	}
+}

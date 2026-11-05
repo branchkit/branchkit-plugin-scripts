@@ -240,6 +240,9 @@ func TestRecordsBelongToTheScriptThatNamesItself(t *testing.T) {
 		{"", "focus-review", "focus"},            // legacy
 		{"", "focus-timer-x", "focus-timer"},     // legacy, longest name wins
 		{"", "gone-x", ""},                       // legacy, no such script
+		{"", "5-focus-review", "focus"},          // no field: the scoped id names it
+		{"", "11-focus-timer-x", "focus-timer"},  // even when another name is its prefix
+		{"", "4-gone-x", "gone"},                 // a scoped id needs no live script
 	}
 	for _, c := range cases {
 		if got := ownerOf(c.owner, c.id, names); got != c.want {
