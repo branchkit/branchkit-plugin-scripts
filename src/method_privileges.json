@@ -49,6 +49,7 @@
     "events.emit": null,
     "http.request": null,
     "hud.create_channel": null,
+    "hud.focus": null,
     "hud.hide": null,
     "hud.push": null,
     "hud.remove_channel": null,
