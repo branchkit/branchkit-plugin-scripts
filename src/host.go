@@ -1494,13 +1494,56 @@ const (
 	chooseTimeout = 45 * time.Second
 )
 
-// choiceCodewordPool supplies the spoken badges. Borrowed verbatim from
-// the tie chooser rather than invented: the words are already curated to
-// be acoustically distinct and unlikely to collide with command words, and
-// two pools would be two things to keep good.
-var choiceCodewordPool = []string{
-	"harp", "arch", "drum", "bell", "fern", "kite",
-	"lake", "moon", "nest", "pearl", "quill", "rune",
+// alphabetCollection is the platform's pointing deck: one vetted codeword
+// per letter, published by the voice plugin. The chooser badges its
+// options with it, so an answer is the same word the person says to point
+// into every other list.
+const alphabetCollection = "alphabet"
+
+// choiceNumberWords badge the options when no alphabet is published, or
+// when it has fewer usable words than the chooser has options.
+var choiceNumberWords = []string{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+
+// alphabetWords is the alphabet's codewords, lowercased, one word each,
+// sorted by word as the platform's own choosers sort them. Nil when none
+// is published (or the host has no platform connection, as in tests).
+func (h *Host) alphabetWords() []string {
+	if h.plugin == nil {
+		return nil
+	}
+	records, err := h.plugin.ListAll(alphabetCollection)
+	if err != nil {
+		branchkit.Logf("scripts", "read %s: %v (badging with numbers)", alphabetCollection, err)
+	}
+	seen := map[string]bool{}
+	var words []string
+	for _, rec := range records {
+		var r AlphabetRecord
+		w := ""
+		if json.Unmarshal(rec.Payload, &r) == nil {
+			w = strings.ToLower(strings.TrimSpace(r.Codeword))
+		}
+		if w != "" && !strings.Contains(w, " ") && !seen[w] {
+			seen[w] = true
+			words = append(words, w)
+		}
+	}
+	sort.Strings(words)
+	return words
+}
+
+// choiceDeck is the words n options are badged with: the alphabet when it
+// has a word for each, else the number words. A view never mixes the two,
+// and never cycles a word onto a second option. Nil when neither is large
+// enough.
+func choiceDeck(alphabet []string, n int) []string {
+	switch {
+	case len(alphabet) >= n:
+		return alphabet
+	case len(choiceNumberWords) >= n:
+		return choiceNumberWords
+	}
+	return nil
 }
 
 // openChooser is the one chooser that may be open at a time.
@@ -1514,6 +1557,7 @@ var choiceCodewordPool = []string{
 type openChooser struct {
 	script  string
 	byCode  map[string]string // codeword -> the option value handed back
+	codes   []string          // the badge per option, in the options' order
 	deliver func(pick any) error
 	timer   *time.Timer
 }
@@ -1546,10 +1590,12 @@ func (h *Host) beginChoose(script string, options []string, deliver func(pick an
 	if len(options) == 0 {
 		return fmt.Errorf("choose(): needs at least one option")
 	}
-	if len(options) > len(choiceCodewordPool) {
+	alphabet := h.alphabetWords()
+	deck := choiceDeck(alphabet, len(options))
+	if deck == nil {
 		return fmt.Errorf("choose(): %d options exceeds the %d available codewords — "+
 			"a spoken chooser stops being usable well before this",
-			len(options), len(choiceCodewordPool))
+			len(options), max(len(alphabet), len(choiceNumberWords)))
 	}
 
 	h.chooseMu.Lock()
@@ -1559,10 +1605,10 @@ func (h *Host) beginChoose(script string, options []string, deliver func(pick an
 		return fmt.Errorf("choose(): %q is already waiting for an answer — "+
 			"only one chooser can hold the spoken surface at a time", owner)
 	}
-	c := &openChooser{script: script, byCode: map[string]string{}, deliver: deliver}
+	c := &openChooser{script: script, byCode: map[string]string{}, codes: deck[:len(options)], deliver: deliver}
 	entries := make([]branchkit.CollectionPutEntry, 0, len(options))
 	for i, opt := range options {
-		code := choiceCodewordPool[i]
+		code := c.codes[i]
 		c.byCode[code] = opt
 		payload, err := json.Marshal(map[string]any{"codeword": code, "pick": code})
 		if err != nil {
@@ -1590,7 +1636,7 @@ func (h *Host) beginChoose(script string, options []string, deliver func(pick an
 		return fmt.Errorf("choose(): %v", err)
 	}
 
-	h.renderChooser(script, options)
+	h.renderChooser(script, c.codes, options)
 
 	h.chooseMu.Lock()
 	if h.chooser == c {
@@ -1610,12 +1656,10 @@ func (h *Host) beginChoose(script string, options []string, deliver func(pick an
 // from the HUD kit, and every other renderer (speech above all) gets the
 // same question. As raw HTML it was a spoken question nobody who cannot see
 // the screen would ever hear.
-func (h *Host) renderChooser(script string, options []string) {
-	words := make([]string, len(options))
+func (h *Host) renderChooser(script string, words, options []string) {
 	items := make([]branchkit.OutputItem, len(options))
 	for i, opt := range options {
-		word := choiceCodewordPool[i]
-		words[i] = word
+		word := words[i]
 		say, subtitle := word, opt
 		items[i] = branchkit.OutputItem{
 			ID:       word,
@@ -1650,7 +1694,7 @@ func (h *Host) renderChooser(script string, options []string) {
 	}
 }
 
-// joinWords reads a list aloud: "harp", "harp or arch", "harp, arch or drum".
+// joinWords reads a list aloud: "aim", "aim or bus", "aim, bus or car".
 func joinWords(w []string) string {
 	switch len(w) {
 	case 0:

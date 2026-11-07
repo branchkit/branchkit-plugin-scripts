@@ -321,7 +321,9 @@ choose({"red", "green", "blue"}, function(pick)
 end)
 ```
 
-Each option gets a spoken codeword, and the HUD shows both — `[harp] red`.
+Each option gets a spoken codeword from the `alphabet` collection, the
+words the person says to point into every other list (`one` to `nine` when
+no alphabet is published), and the HUD shows both: `aim` beside `red`.
 Say the codeword; the callback receives the option *you* listed, not the
 codeword.
 

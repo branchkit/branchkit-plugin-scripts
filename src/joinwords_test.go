@@ -10,9 +10,9 @@ func TestJoinWordsReadsAloud(t *testing.T) {
 		want string
 	}{
 		{nil, ""},
-		{[]string{"harp"}, "harp"},
-		{[]string{"harp", "arch"}, "harp or arch"},
-		{[]string{"harp", "arch", "drum"}, "harp, arch or drum"},
+		{[]string{"aim"}, "aim"},
+		{[]string{"aim", "bus"}, "aim or bus"},
+		{[]string{"aim", "bus", "car"}, "aim, bus or car"},
 	} {
 		if got := joinWords(tc.in); got != tc.want {
 			t.Errorf("joinWords(%v) = %q, want %q", tc.in, got, tc.want)

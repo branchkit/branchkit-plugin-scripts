@@ -125,7 +125,7 @@
       { "name": "modifiers", "fields": ["key"] },
       { "name": "_platform.key_names", "fields": ["name"] },
       "layout_characters",
-      "alphabet",
+      { "name": "alphabet", "fields": ["codeword"] },
       { "name": "number", "fields": ["key"] },
       { "name": "direction", "fields": ["key"] },
       { "name": "_platform.bindings", "fields": ["id", "trigger", "action"] }

@@ -19,6 +19,12 @@ type PlatformKeyNamesRecord struct {
 	Name string `json:"name"`
 }
 
+// AlphabetRecord is the shape this plugin declared it reads from the
+// "alphabet" collection. Unmarshal a CollectionRecord's Payload into it.
+type AlphabetRecord struct {
+	Codeword string `json:"codeword"`
+}
+
 // DirectionRecord is the shape this plugin declared it reads from the
 // "direction" collection. Unmarshal a CollectionRecord's Payload into it.
 type DirectionRecord struct {

@@ -43,7 +43,7 @@ func TestChooseRefusedWithoutTheGrant(t *testing.T) {
 func TestSecondChooserIsRefusedAndNamesTheHolder(t *testing.T) {
 	h := &Host{}
 	h.chooseMu.Lock()
-	h.chooser = &openChooser{script: "first", byCode: map[string]string{"harp": "a"}}
+	h.chooser = &openChooser{script: "first", byCode: map[string]string{"aim": "a"}}
 	h.chooseMu.Unlock()
 
 	err := h.beginChoose("second", []string{"b"}, func(any) error { return nil })
@@ -55,11 +55,12 @@ func TestSecondChooserIsRefusedAndNamesTheHolder(t *testing.T) {
 	}
 }
 
-// The pool bounds how many options can be spoken. Failing loudly beats
+// The deck bounds how many options can be spoken. Failing loudly beats
 // cycling codewords, which would make two options answer to one word.
+// With no alphabet published the deck is the number words.
 func TestChooseRefusesMoreOptionsThanCodewords(t *testing.T) {
 	h := &Host{}
-	many := make([]string, len(choiceCodewordPool)+1)
+	many := make([]string, len(choiceNumberWords)+1)
 	for i := range many {
 		many[i] = "opt"
 	}
@@ -78,10 +79,10 @@ func TestPickReturnsTheOptionNotTheCodeword(t *testing.T) {
 	got := make(chan any, 1)
 	h.chooser = &openChooser{
 		script:  "ask",
-		byCode:  map[string]string{"harp": "red", "arch": "green"},
+		byCode:  map[string]string{"aim": "red", "bus": "green"},
 		deliver: func(pick any) error { got <- pick; return nil },
 	}
-	c, pick, err := h.takeChoice("arch")
+	c, pick, err := h.takeChoice("bus")
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
 	}
@@ -106,10 +107,10 @@ func TestUnknownCodewordLeavesTheChooserOpen(t *testing.T) {
 	h := &Host{}
 	h.chooser = &openChooser{
 		script:  "ask",
-		byCode:  map[string]string{"harp": "red"},
+		byCode:  map[string]string{"aim": "red"},
 		deliver: func(any) error { return nil },
 	}
-	if _, _, err := h.takeChoice("kite"); err == nil {
+	if _, _, err := h.takeChoice("car"); err == nil {
 		t.Fatal("an option that is not in the chooser must error")
 	}
 	if h.chooser == nil {
@@ -124,7 +125,7 @@ func TestTimeoutDeliversNil(t *testing.T) {
 	got := make(chan any, 1)
 	c := &openChooser{
 		script:  "ask",
-		byCode:  map[string]string{"harp": "red"},
+		byCode:  map[string]string{"aim": "red"},
 		deliver: func(pick any) error { got <- pick; return nil },
 	}
 	h.chooser = c
@@ -170,5 +171,24 @@ func TestToOptionsStringifiesScalars(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
 		}
+	}
+}
+
+// The options are badged with the alphabet the person points with
+// everywhere else, in the order the platform's choosers use; numbers only
+// when the alphabet cannot give each option a word of its own.
+func TestChoiceDeckIsTheAlphabetElseNumbers(t *testing.T) {
+	alpha := []string{"aim", "bus", "car"}
+	if d := choiceDeck(alpha, 3); strings.Join(d[:3], ",") != "aim,bus,car" {
+		t.Errorf("deck = %v, want the alphabet", d)
+	}
+	if d := choiceDeck(alpha, 4); d[0] != "one" {
+		t.Errorf("alphabet smaller than the options: deck = %v, want the number words", d)
+	}
+	if d := choiceDeck(nil, 2); d[0] != "one" {
+		t.Errorf("no alphabet: deck = %v, want the number words", d)
+	}
+	if d := choiceDeck(alpha, len(choiceNumberWords)+1); d != nil {
+		t.Errorf("more options than any deck: got %v, want nil", d)
 	}
 }
