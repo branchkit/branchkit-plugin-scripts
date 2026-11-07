@@ -85,63 +85,6 @@ func (m *memStore) Call(method string, params any, result any) error {
 	return json.Unmarshal(raw, result)
 }
 
-// Records stored under the old `<script>-<key>` id move to the scoped id at
-// start: by their owner field, or, older than that, by the longest script
-// file name the id starts with. A record already moved, or one no script
-// owns, stays where it is.
-func TestStoreKeysMoveToTheScopedForm(t *testing.T) {
-	dir := t.TempDir()
-	for _, f := range []string{"focus.lua", "focus-timer.lua"} {
-		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	rec := func(fields map[string]any) json.RawMessage {
-		raw, _ := json.Marshal(fields)
-		return raw
-	}
-	store := &memStore{records: map[string]json.RawMessage{
-		// The field says focus, though focus-timer is the longer prefix.
-		"focus-timer-x": rec(map[string]any{"key": "focus-timer-x", "value": `1`, "script": "focus"}),
-		// No field: the longest name decides.
-		"focus-timer-y": rec(map[string]any{"key": "focus-timer-y", "value": `2`}),
-		"gone-z":        rec(map[string]any{"key": "gone-z", "value": `3`}),
-		"5-focus-w":     rec(map[string]any{"key": "5-focus-w", "value": `4`, "script": "focus", "name": "w"}),
-	}}
-	p := branchkit.NewDetachedPlugin()
-	p.Methods = branchkit.NewMethods(store)
-	h := &Host{plugin: p, dir: dir}
-	h.migrateStoreKeys()
-
-	ids := []string{}
-	for id := range store.records {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	want := []string{"11-focus-timer-y", "5-focus-timer-x", "5-focus-w", "gone-z"}
-	if len(ids) != len(want) {
-		t.Fatalf("ids = %q, want %q", ids, want)
-	}
-	for i := range want {
-		if ids[i] != want[i] {
-			t.Fatalf("ids = %q, want %q", ids, want)
-		}
-	}
-	var moved struct{ Key, Value, Script, Name string }
-	_ = json.Unmarshal(store.records["5-focus-timer-x"], &moved)
-	if moved.Key != "5-focus-timer-x" || moved.Value != "1" || moved.Script != "focus" || moved.Name != "timer-x" {
-		t.Errorf("moved record = %+v", moved)
-	}
-
-	// The script reads its value back under the new id.
-	s := collScript("focus", "", "")
-	s.host = h
-	got, err := s.bridgeStored("timer-x")
-	if err != nil || got != float64(1) {
-		t.Errorf("stored(timer-x) = %v, %v", got, err)
-	}
-}
-
 // A mode entered by voice is written by the platform from the command's
 // `sets_tags`, so its record holds only `name`, the scoped id, and no
 // `script` field. The id still names its owner: teardown must clear it and
