@@ -639,6 +639,7 @@
     "secrets.list": null,
     "secrets.request_slot": null,
     "secrets.set": null,
+    "selection.clear": null,
     "selection.pick": null,
     "selection.set": null,
     "session.boundary": null,
